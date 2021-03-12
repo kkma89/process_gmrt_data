@@ -31,27 +31,33 @@ Detailed help:
 ------------
 filterbank options
 
--n	    : number of channels
+-n      : number of channels
 
--p	    : number of polarisations
+-p      : number of polarisations
 
--f	    : Frequency of the highest channel in MHz (def: 500.0)
--bw	    : Recording bandwidth in MHz (def: 200.0)
--sb	    : Sideband sense. -1 for LSB; 1 for USB (def: -1)
--mjd	  : Timestamp of the first sample in MJD
--ts	    : Sampling time (in secs)
--E	    : Parameter file
--rfi	  : Specify if the data is cleaned of RFI
-	        (0: norfix[default]; 1: gptool; 2: rfiClean)
+-f      : Frequency of the highest channel in MHz (def: 500.0)
+
+-bw     : Recording bandwidth in MHz (def: 200.0)
+
+-sb     : Sideband sense. -1 for LSB; 1 for USB (def: -1)
+
+-mjd    : Timestamp of the first sample in MJD
+
+-ts	: Sampling time (in secs)
+
+-E	: Parameter file
+
+-rfi    : Specify if the data is cleaned of RFI
+            (0: norfix[default]; 1: gptool; 2: rfiClean)
 
 DSPSR options
 
--dspsr	: Process filterbank file with DSPSR (def: False)
--b	    : Number of bins to fold (def: 128)
--tsub	  : Sub-integration length in seconds (def: 10.0)
--t	    : Number of thread to use (def: 1)
+-dspsr : Process filterbank file with DSPSR (def: False)
+-b     : Number of bins to fold (def: 128)
+-tsub  : Sub-integration length in seconds (def: 10.0)
+-t     : Number of thread to use (def: 1)
 
 iterative_clean.py options
 
--clean	: Clean fits file produced by DSPSR (def: False)
--m	    : Number of iterations (def: 5)
+-clean : Clean fits file produced by DSPSR (def: False)
+-m     : Number of iterations (def: 5)
