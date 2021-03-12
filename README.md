@@ -29,7 +29,7 @@ For detailed instruction of usage, see the help page (-h option).
 
 Detailed help:
 ------------
-filterbank options
+# filterbank options
 
 -n      : number of channels
 
@@ -50,7 +50,7 @@ filterbank options
 -rfi    : Specify if the data is cleaned of RFI
             (0: norfix[default]; 1: gptool; 2: rfiClean)
 
-DSPSR options
+# DSPSR options
 
 -dspsr : Process filterbank file with DSPSR (def: False)
 
@@ -60,7 +60,7 @@ DSPSR options
 
 -t     : Number of thread to use (def: 1)
 
-iterative_clean.py options
+# iterative_clean.py options
 
 -clean : Clean fits file produced by DSPSR (def: False)
 
