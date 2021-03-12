@@ -53,11 +53,15 @@ filterbank options
 DSPSR options
 
 -dspsr : Process filterbank file with DSPSR (def: False)
+
 -b     : Number of bins to fold (def: 128)
+
 -tsub  : Sub-integration length in seconds (def: 10.0)
+
 -t     : Number of thread to use (def: 1)
 
 iterative_clean.py options
 
 -clean : Clean fits file produced by DSPSR (def: False)
+
 -m     : Number of iterations (def: 5)
