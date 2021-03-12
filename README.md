@@ -32,7 +32,9 @@ Detailed help:
 filterbank options
 
 -n	    : number of channels
+
 -p	    : number of polarisations
+
 -f	    : Frequency of the highest channel in MHz (def: 500.0)
 -bw	    : Recording bandwidth in MHz (def: 200.0)
 -sb	    : Sideband sense. -1 for LSB; 1 for USB (def: -1)
