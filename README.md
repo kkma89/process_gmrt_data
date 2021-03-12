@@ -16,13 +16,13 @@ the filterbank file to psrfits using  DSPSR and also perform  RFI
 excision using iterative_cleaner.py extracted from coast_guard 
 pipeline (https://github.com/larskuenkel/iterative_cleaner).
 
-------
+
 Compilation:
-
+------------
 gcc -o process_gmrt_psr process_gmrt_psr.c 
-------
-Usage:
 
+Usage:
+------------
 process_gmrt_psr <input_file> {options}
 
 For detailed instruction of usage, see the help page (-h option).
