@@ -1,0 +1,411 @@
+import matplotlib.pyplot as plt
+from scipy.optimize import curve_fit
+import numpy as np
+import pandas as pd
+from pandas import DataFrame
+from sklearn.metrics import r2_score
+from lmfit import Model, Parameters 
+
+############################################____data_reading_________########################
+
+#Reading our pulsar data in RR, LL, RL, LR, and converting it to I_m, V_m, U_m, V_m
+
+new_header=["RR","LL","RL","LR"]
+stokes=pd.read_table('filename', header= None,skiprows=1,names=new_header, sep=" ")
+rr=stokes.RR
+ll=stokes.LL
+rl=stokes.RL
+lr=stokes.LR
+
+ini=0
+fin=200
+a=np.mean(rr[ini:fin])
+rr_1=rr-a
+
+b=np.mean(ll[ini:fin])
+ll_1=ll-b
+
+c=np.mean(rl[ini:fin])
+rl_1=rl-c
+
+d=np.mean(lr[ini:fin])
+lr_1=lr-d
+
+I_m=rr_1+ll_1
+V_m=ll_1-rr_1
+Q_m=rl_1+lr_1
+U_m=-lr_1+rl_1
+
+
+
+new_header=["Num","I","Q","U","V"]
+epn=pd.read_table('epndata.txt',header= None,skiprows=0,names=new_header, sep=" ")
+#print(epn)
+
+num=epn.Num
+I=epn.I
+Q=epn.Q
+U=epn.U
+V=epn.V
+
+######################################_________data_modeling___________##################################
+
+num_ar=np.array(num[445:575])
+print(num[512])
+print(np.max(I))
+I_ar=np.array(I)  
+V_ar=np.array(V)
+Q_ar=np.array(Q)
+U_ar=np.array(U)
+
+
+I_ep=np.roll(I_ar,208)
+V_ep=np.roll(V_ar,208)
+Q_ep=np.roll(Q_ar,208)
+U_ep=np.roll(U_ar,208)
+
+I_epn=I_ep[445:575]
+V_epn=V_ep[445:575]
+Q_epn=Q_ep[445:575]
+U_epn=U_ep[445:575]
+
+I_norm=I_m/(np.max(I_m))
+V_norm=V_m/(np.max(I_m))
+Q_norm=Q_m/(np.max(I_m))
+U_norm=U_m/(np.max(I_m))
+
+
+init=0
+finl=200
+off_pulse_std_V=np.std(V_norm[init:finl])/np.std(I_norm[init:finl])
+off_pulse_std_Q=np.std(Q_norm[init:finl])/np.std(I_norm[init:finl])
+off_pulse_std_U=np.std(U_norm[init:finl])/np.std(I_norm[init:finl])
+
+roll_data= #to make the plots at same point
+I_gmr=np.roll(I_norm,(roll_data))
+V_gmr=np.roll(V_norm/off_pulse_std_V,(roll_data))
+Q_gmr=np.roll(Q_norm/off_pulse_std_Q,(roll_data))
+U_gmr=np.roll(U_norm/off_pulse_std_U,(roll_data))
+
+I_std=np.full(shape=130,fill_value=np.std(I_gmr),dtype=float)
+print(I_std)
+
+I_gmrt=I_gmr[445:575]
+V_gmrt=V_gmr[445:575]
+Q_gmrt=Q_gmr[445:575]
+U_gmrt=U_gmr[445:575]
+
+
+##################################################___plotting____################################################3
+
+fig=plt.figure(figsize=(16,8))
+plt.subplot(1,2,1)
+plt.plot(num,rr, "r",label="RR")
+plt.plot(num,ll, "b",label="LL")
+plt.plot(num,rl, "k",label="RL")
+plt.plot(num,lr, "g",label="LR")
+plt.xlabel("Pulse Phase (bins)", fontsize=16)
+plt.ylabel("arb Intensity",fontsize=16)
+plt.title("Actual Plot",fontsize=16)
+plt.legend()
+
+plt.subplot(1,2,2)
+plt.plot(num,rr_1, "r",label="RR")
+plt.plot(num,ll_1, "b",label="LL")
+plt.plot(num,rl_1, "k",label="RL")
+plt.plot(num,lr_1, "g",label="LR")
+plt.xlabel("Pulse Phase (bins)", fontsize=16)
+plt.ylabel("arb Intensity",fontsize=16)
+plt.title("Plot after subracting with the mean",fontsize=16)
+plt.legend()
+
+fig=plt.figure(figsize=(16,8))
+plt.annotate("peak point",(num[512],np.max(I_epn)))
+plt.subplot(1,2,1)
+plt.plot(num_ar,I_epn, "r",label="I_epn")
+plt.plot(num_ar,V_epn, "b",label="V_epn")
+plt.plot(num_ar,Q_epn, "k",label="Q_epn")
+plt.plot(num_ar,U_epn, "g",label="U_epn")
+plt.xlabel("Pulse Phase (bins)", fontsize=16)
+plt.ylabel("Flux",fontsize=16)
+plt.title("Original Stoke Plot (from EPN data archive)",fontsize=16)
+plt.legend()
+
+plt.subplot(1,2,2)
+plt.plot(num_ar,I_gmrt, "r",label="I_gmrt") 
+plt.plot(num_ar,V_gmrt, "b",label="V_gmrt")
+plt.plot(num_ar,Q_gmrt, "k",label="Q_gmrt")
+plt.plot(num_ar,U_gmrt, "g",label="U_gmrt")
+plt.xlabel("Pulse Phase (bins)", fontsize=16)
+plt.ylabel("Flux",fontsize=16)
+plt.title("GMRT Stokes Plot",fontsize=16)
+plt.legend()
+
+
+
+###############################################____curve_fitting___#####################################
+
+
+def fun1(I,g1,g2,h1,h2,c1,c2,b1,b2):
+    Omega=#ISM and ionosphere rotation angle
+    return (b1**2*I + b2**2*I + g1**2*I + g2**2*I + h1**2*I + h2**2*I + 
+            I*c1**2 + I*c2**2 + 2*b2*g1*U_epn - 2*b1*g2*U_epn - 2*h2*c1*U_epn + 2*h1*c2*U_epn + 
+            (2*b1*g1*Q_epn + 2*b2*g2*Q_epn - 2*h1*Q_epn*c1 - 2*h2*Q_epn*c2 - b1**2*V_epn - b2**2*V_epn + 
+             g1**2*V_epn + g2**2*V_epn - h1**2*V_epn - h2**2*V_epn + c1**2*V_epn + c2**2*V_epn)*np.cos(2*Omega) + 
+            (b1**2*Q_epn + b2**2*Q_epn - g1**2*Q_epn - g2**2*Q_epn + h1**2*Q_epn + 
+             h2**2*Q_epn - Q_epn*c1**2 - Q_epn*c2**2 + 2*b1*g1*V_epn + 2*b2*g2*V_epn - 2*h1*c1*V_epn - 
+             2*h2*c2*V_epn)*np.sin(2*Omega))/2
+        
+
+fig=plt.figure(figsize=(16,8))
+popt1, pcov1=curve_fit(fun1,I_gmrt,I_epn, sigma=I_std)
+print("values of optimized parameters = ",np.around(popt1,decimals=8))
+#print(np.around(pcov1/10**10,decimals=2)) 
+#print("dialgonal elements squrt root",np.sqrt(np.diag(pcov1)))
+plt.subplot(121)
+plt.plot(I_epn, fun1(I_epn, *popt1), 'r')
+plt.xlabel('I_epn')
+plt.ylabel('I_gmrt')
+plt.title("curve fitted with optimized parameters")
+
+
+
+
+#####################################################____least_square_fitting___#############################
+Imodel=Model(fun1)
+
+value1=#value for curvefit
+value2=#value for curvefit
+value3=#value for curvefit
+value4=#value for curvefit
+value5=#value for curvefit
+value6=#value for curvefit
+value7=#value for curvefit
+value8=#value for curvefit
+
+params=Parameters()
+params.add("g1", value1)
+params.add("g2", value2)
+params.add("h1", value3) 
+params.add("h2", value4) 
+params.add("c1", value5)
+params.add("c2", value6)
+params.add("b1", value7)
+params.add("b2", value8)
+
+
+Iresult = Imodel.fit(I_epn,params, I=I_epn, weights=I_std)
+print(Iresult.fit_report())
+
+plt.subplot(122)
+plt.plot(I_epn, Iresult.best_fit)
+
+plt.xlabel('I_epn')
+plt.ylabel('I_grmt')
+plt.title("Least square fitting graph with the initial variables vaules as the optimized parameters form curve fitting")
+
+fig=plt.figure(figsize=(8,6))
+Idelay = Iresult.eval_uncertainty(sigma=1)
+print("uncertainties=",Idelay)
+plt.plot(num_ar,I_gmrt, "r--", label="I_epn")
+plt.fill_between(num_ar, Iresult.best_fit-Idelay, Iresult.best_fit+Idelay, color="#ABABAB",label='1-$\sigma$ uncertainty band')
+plt.legend()
+
+
+
+##################################################_____checking_data_____####################################################
+
+
+print("R^2 with optimised parameters (if close to 1--well fitted, if close to 0--not fitted well) = ",r2_score(I_epn, fun1(I_epn,*(popt1))))
+print("R^2 with final values of parameters (if close to 1--well fitted, if close to 0--not fitted well) = ",r2_score(I_epn,Iresult.best_fit))
+
+fig=plt.figure(figsize=(8,6))
+plt.plot(num_ar,I_epn-Iresult.best_fit,label="difference between I_grmt and I_epn")
+
+
+
+#############################################_______calibration__V__#############################################
+
+def fun2(V,g1,g2,h1,h2,c1,c2,b1,b2):
+    Phi=#parallactic rotation angle
+    Omega=#ISM and ionosphere rotation angle
+    return(np.sin(2*Phi)*(I_epn*(-(b1*h1) - b2*h2 + g1*c1 + g2*c2) + 
+                          (-(g1*h1*Q_epn) - g2*h2*Q_epn + b1*Q_epn*c1 + b2*Q_epn*c2 + b1*h1*V + b2*h2*V + g1*c1*V +
+                           g2*c2*V)*np.cos(2*Omega) + (b1*c1 + b2*c2)*V*np.sin(2*Omega)) + 
+           np.sin(2*Phi)*((g2*h1 - g1*h2 + b2*c1 - b1*c2)*U_epn - 
+                          (b1*h1*Q_epn + b2*h2*Q_epn + g1*Q_epn*c1 + g2*Q_epn*c2 + g1*h1*V + g2*h2*V)*np.sin(2*Omega)) + 
+           ((np.cos(Phi)**2)*(b1**2*I_epn + b2**2*I_epn + g1**2*I_epn + g2**2*I_epn - h1**2*I_epn - h2**2*I_epn - I_epn*c1**2 - 
+                              I_epn*c2**2 +  2*b2*g1*U_epn - 2*b1*g2*U_epn + 2*h2*c1*U_epn - 2*h1*c2*U_epn + 
+                            (2*b1*g1*Q_epn + 2*b2*g2*Q_epn + 2*h1*Q_epn*c1 + 2*h2*Q_epn*c2 - b1**2*V - b2**2*V +
+                             g1**2*V + g2**2*V + h1**2*V + h2**2*V - c1**2*V - c2**2*V)*np.cos(2*Omega) + 
+                            (b1**2*Q_epn + b2**2*Q_epn - g1**2*Q_epn - g2**2*Q_epn - h1**2*Q_epn - h2**2*Q_epn + 
+                             Q_epn*c1**2 + Q_epn*c2**2 + 2*b1*g1*V + 2*b2*g2*V + 2*h1*c1*V + 2*h2*c2*V)*np.sin(2*Omega)))/2 - 
+           ((np.sin(Phi)**2)*(b1**2*I_epn + b2**2*I_epn + g1**2*I_epn + g2**2*I_epn - h1**2*I_epn - h2**2*I_epn - 
+                              I_epn*c1**2 - I_epn*c2**2 + 2*b2*g1*U_epn - 2*b1*g2*U_epn + 2*h2*c1*U_epn -
+                              2*h1*c2*U_epn + (2*b1*g1*Q_epn + 2*b2*g2*Q_epn + 2*h1*Q_epn*c1 + 2*h2*Q_epn*c2
+                                               - b1**2*V - b2**2*V + g1**2*V + g2**2*V + h1**2*V + h2**2*V -
+                                               c1**2*V - c2**2*V)*np.cos(2*Omega) + 
+                              (b1**2*Q_epn + b2**2*Q_epn - g1**2*Q_epn - g2**2*Q_epn - h1**2*Q_epn - h2**2*Q_epn + 
+                               Q_epn*c1**2 + Q_epn*c2**2 + 2*b1*g1*V + 2*b2*g2*V +  2*h1*c1*V + 
+                               2*h2*c2*V)*np.sin(2*Omega)))/2)
+
+Vmodel = Model(fun2)
+value1=#value from least square fitting of I
+value2=#value from least square fitting of I
+value3=#value from least square fitting of I
+value4=#value from least square fitting of I
+value5=#value from least square fitting of I
+value6=#value from least square fitting of I
+value7=#value from least square fitting of I
+value8=#value from least square fitting of I
+
+params=Parameters()
+params.add("g1", value1 , min=value1-0.15, max=value1+0.15)
+params.add("g2", value2, min=value2-0.15, max=value2+0.15)
+params.add("h1", value3 , min=value3-0.15, max=value3+0.15) 
+params.add("h2", value4, min=value4-0.15, max=value4+0.15) 
+params.add("c1", value5, min=value5-0.15, max=value5+0.15)
+params.add("c2", value6, min=value6-0.15, max=value6+0.15)
+params.add("b1", value7, min=value7-0.15, max=value7+0.15)
+params.add("b2", value8, min=value8-0.15, max=value8+0.15)
+
+
+
+Vresult = Vmodel.fit(V_epn,params,V=V_epn, weights=V_std)
+print(Vresult.fit_report())
+fig=plt.figure(figsize=(8,6))
+plt.plot(V_epn, Vresult.best_fit)
+
+plt.xlabel('V_epn')
+plt.ylabel('V_grmt')
+plt.title("Least square fitting graph with the initial variables vaules as the optimized parameters form curve fitting")
+
+fig=plt.figure(figsize=(8,6))
+Vdelay = Vresult.eval_uncertainty(sigma=1)
+print(Vdelay)
+plt.plot(num_ar,V_epn, "r--", label="V_epn")
+plt.fill_between(num_ar, Vresult.best_fit-Vdelay, Vresult.best_fit+Vdelay, color="#ABABAB",label='1-$\sigma$ uncertainty band')
+plt.legend()
+
+###################################################__checking_closeness___#########################################
+print("R^2 with optimised parameters (if close to 1--well fitted, if close to 0--not fitted well) = ",r2_score(V_epn, fun2(V_epn,*(popt2))))
+print("R^2 with final values of parameters (if close to 1--well fitted, if close to 0--not fitted well) = ",r2_score(V_epn, Vresult.best_fit))
+fig=plt.figure(figsize=(8,6))
+plt.plot(num_ar, V_epn-Vresult.best_fit,label="difference between V_grmt and V_epn")
+
+#############################################_______calibration__Q__#############################################
+
+def fun4(Q,g1,g2,h1,h2,c1,c2,b1,b2):
+    Phi=#parallactic rotation angle
+    Omega=#ISM and ionosphere rotation angle
+    return (np.cos(2*Phi)*(b1*h1*I_epn + b2*h2*I_epn - g1*I_epn*c1 - g2*I_epn*c2 - g2*h1*U_epn + 
+                          g1*h2*U_epn - b2*c1*U_epn + b1*c2*U_epn + (g1*h1*Q + g2*h2*Q - b1*Q*c1 -
+                                                                     b2*Q*c2 - b1*h1*V_epn - b2*h2*V_epn - g1*c1*V_epn 
+                                                                     - g2*c2*V_epn)*np.cos(2*Omega) + 
+                          (b1*h1*Q + b2*h2*Q + g1*Q*c1 + g2*Q*c2 + g1*h1*V_epn + g2*h2*V_epn - 
+                           b1*c1*V_epn - b2*c2*V_epn)*np.sin(2*Omega)) + 
+            (np.sin(2*Phi)*(b1**2*I_epn + b2**2*I_epn + g1**2*I_epn + g2**2*I_epn - h1**2*I_epn - 
+                           h2**2*I_epn - I_epn*c1**2 - I_epn*c2**2 + 
+                           2*b2*g1*U_epn - 2*b1*g2*U_epn + 2*h2*c1*U_epn - 2*h1*c2*U_epn + 
+                           (2*b1*g1*Q + 2*b2*g2*Q + 2*h1*Q*c1 + 2*h2*Q*c2 - b1**2*V_epn - b2**2*V_epn + g1**2*V_epn + 
+                            g2**2*V_epn + h1**2*V_epn + h2**2*V_epn - c1**2*V_epn - c2**2*V_epn)*np.cos(2*Omega) + 
+                           (b1**2*Q + b2**2*Q - g1**2*Q - g2**2*Q - h1**2*Q - h2**2*Q + Q*c1**2 +
+                            Q*c2**2 + 2*b1*g1*V_epn + 2*b2*g2*V_epn + 2*h1*c1*V_epn + 2*h2*c2*V_epn)*np.sin(2*Omega)))/2)
+
+Qmodel = Model(fun4)
+value1=#value from least square fitting of I
+value2=#value from least square fitting of I
+value3=#value from least square fitting of I
+value4=#value from least square fitting of I
+value5=#value from least square fitting of I
+value6=#value from least square fitting of I
+value7=#value from least square fitting of I
+value8=#value from least square fitting of I
+
+params=Parameters()
+params.add("g1", value1 , min=value1-0.15, max=value1+0.15)
+params.add("g2", value2, min=value2-0.15, max=value2+0.15)
+params.add("h1", value3 , min=value3-0.15, max=value3+0.15) 
+params.add("h2", value4, min=value4-0.15, max=value4+0.15) 
+params.add("c1", value5, min=value5-0.15, max=value5+0.15)
+params.add("c2", value6, min=value6-0.15, max=value6+0.15)
+params.add("b1", value7, min=value7-0.15, max=value7+0.15)
+params.add("b2", value8, min=value8-0.15, max=value8+0.15)
+
+
+Qresult = Qmodel.fit(Q_epn,params, Q=Q_epn, weights=Q_std)
+print(Qresult.fit_report())
+fig=plt.figure(figsize=(8,6))
+plt.plot(Q_epn, Qresult.best_fit)
+
+plt.xlabel('Q_epn')
+plt.ylabel('Q_grmt')
+plt.title("Least square fitting graph with the initial variables vaules as the optimized parameters form curve fitting")
+
+fig=plt.figure(figsize=(8,6))
+Qdelay = Qresult.eval_uncertainty(sigma=1)
+#print(Qdelay)
+plt.plot(num_ar,Q_epn, "r--", label="Q_epn")
+plt.fill_between(num_ar, Qresult.best_fit-Qdelay, Qresult.best_fit+Qdelay, color="#ABABAB",label='1-$\sigma$ uncertainty band')
+plt.legend()
+
+###################################################__checking_closeness___#########################################
+print("R^2 with optimised parameters (if close to 1--well fitted, if close to 0--not fitted well) = ",r2_score(Q_epn, fun4(Q_epn,*(popt4))))
+print("R^2 with final values of parameters (if close to 1--well fitted, if close to 0--not fitted well) = ",r2_score(Q_epn, Qresult.best_fit))
+
+fig=plt.figure(figsize=(8,6))
+plt.plot(num_ar, Q_epn-Qresult.best_fit,label="difference between Q_grmt and Q_epn")
+
+
+###############################___________calibration____U___#############################################
+def fun3(U,g1,g2,h1,h2,c1,c2,b1,b2):
+    Omega=#ISM and ionosphere rotation angle
+    return (b2*h1*I_epn - b1*h2*I_epn - g2*I_epn*c1 + g1*I_epn*c2 + g1*h1*U + g2*h2*U + b1*c1*U + b2*c2*U + 
+            (g2*h1*Q_epn - g1*h2*Q_epn - b2*Q_epn*c1 + b1*Q_epn*c2 - b2*h1*V_epn +  
+             b1*h2*V_epn - g2*c1*V_epn + g1*c2*V_epn)*np.cos(2*Omega) + 
+            (b2*h1*Q_epn - b1*h2*Q_epn + g2*Q_epn*c1 - g1*Q_epn*c2 + 
+             g2*h1*V_epn - g1*h2*V_epn - b2*c1*V_epn + b1*c2*V_epn)*np.sin(2*Omega))
+
+
+Umodel = Model(fun3)
+value1=#value from least square fitting of I
+value2=#value from least square fitting of I
+value3=#value from least square fitting of I
+value4=#value from least square fitting of I
+value5=#value from least square fitting of I
+value6=#value from least square fitting of I
+value7=#value from least square fitting of I
+value8=#value from least square fitting of I
+
+params=Parameters()
+params.add("g1", value1 , min=value1-0.15, max=value1+0.15)
+params.add("g2", value2, min=value2-0.15, max=value2+0.15)
+params.add("h1", value3 , min=value3-0.15, max=value3+0.15) 
+params.add("h2", value4, min=value4-0.15, max=value4+0.15) 
+params.add("c1", value5, min=value5-0.15, max=value5+0.15)
+params.add("c2", value6, min=value6-0.15, max=value6+0.15)
+params.add("b1", value7, min=value7-0.15, max=value7+0.15)
+params.add("b2", value8, min=value8-0.15, max=value8+0.15)
+
+Uresult = Umodel.fit(U_epn,params,U=U_epn)
+print(Uresult.fit_report())
+fig=plt.figure(figsize=(8,6))
+plt.plot(U_epn, Uresult.best_fit)
+
+plt.xlabel('U_epn')
+plt.ylabel('U_grmt')
+plt.title("Least square fitting graph with the initial variables vaules as the optimized parameters form curve fitting")
+
+fig=plt.figure(figsize=(8,6))
+Udelay = Uresult.eval_uncertainty(sigma=1)
+print("uncertaninties=", Udelay)
+plt.plot(num_ar,U_epn, "r--", label="U_epn")
+plt.fill_between(num_ar, Uresult.best_fit-Udelay, Uresult.best_fit+Udelay, color="#ABABAB",label='1-$\sigma$ uncertainty band')
+plt.legend()
+
+#######################################____checking_closeness__#######################################################
+print("R^2 with optimised parameters (if close to 1--well fitted, if close to 0--not fitted well) = ",r2_score(U_epn, fun3(U_epn,*(popt3))))
+print("R^2 with final values of parameters (if close to 1--well fitted, if close to 0--not fitted well) = ",r2_score(U_epn,Uresult.best_fit))
+
+fig=plt.figure(figsize=(8,6))
+plt.plot(num_ar, U_epn-Uresult.best_fit, label="difference between U_grmt and U_epn")
