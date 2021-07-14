@@ -125,7 +125,7 @@ int main(int argc, char *argv[])
 
 	// Defines the buffer sizes
 	short buf[npol*nch], data4p[npol][nch], data1p[nch];
-
+	int intdata4p[npol][nch];
 	// Opens the input file
 	infile = fopen(input,"rb");
 	if ((infile == NULL))
@@ -235,19 +235,26 @@ int main(int argc, char *argv[])
 				for (j=0;j<nch;j++)
 				{
 					data4p[i][j] = buf[(j*4)+i];
+					intdata4p[i][j] = buf[(j*4)+i];
 				}
 			}
 			// Writing out each polarisation channel
 			// separately. Order is RR, LL, RL, LR.
-			fwrite(&data4p[2],2,nch,outfile);
+			//int sum, k;
+			//for (k=0;k<nch;k++)
+			//{
+			//	sum+=intdata4p[0][k];
+			//}
+			//printf("%d\n",sum/nch);
 			fwrite(&data4p[0],2,nch,outfile);
-			fwrite(&data4p[3],2,nch,outfile);
+			fwrite(&data4p[2],2,nch,outfile);
 			fwrite(&data4p[1],2,nch,outfile);
+			fwrite(&data4p[3],2,nch,outfile);
 		}
 		// Loop handling total power data
 		else if (npol == 1)
 		{
-			short buf[nch];
+			int16_t buf[nch];
 			// Reads in data to buffer
 			fread(buf, 2, nch, infile);
 			for (i=0;i<nch;i++)
