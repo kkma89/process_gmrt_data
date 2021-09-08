@@ -584,7 +584,7 @@ void usage()
 			"-E\t: Parameter file\n"
 			"-rfi\t: Specify if the data is cleaned of RFI\n"
 			"\t (0: norfix[default]; 1: gptool; 2: rfiClean)\n"
-			"\t-eq\t: Equalise the different polarisation bands.\n"
+			"-eq\t: Equalise the different polarisation bands.\n"
 			"\t (Experimental and only works with -op=4 option)\n"
 			"\nDSPSR options\n\n"
 			"-dspsr\t: Process filterbank file with DSPSR (def: False)\n"
