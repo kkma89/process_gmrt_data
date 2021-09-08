@@ -37,6 +37,11 @@ For detailed instruction of usage, see the help page (-h option).
 
 // Defining all the functions up front.
 const char* mjd_calc(FILE *tfile);
+struct get_levels {
+float RRavg, RLavg, LLavg, LRavg;
+};
+typedef struct get_levels Struct;
+Struct calc_levels(char *inputfile, int nch, int npol);
 void send_string(FILE *outfile, char *string);
 void send_int(FILE *outfile, char *name, int number);
 void send_double(FILE *outfile, char *name, double number);
@@ -57,8 +62,8 @@ int main(int argc, char *argv[])
 	}
 
 	FILE *infile, *outfile, *parfile;
-	int i=1, j, c, nch=1024, npol=4, nbins=128, threads=1;
-	int dspsr=0, rclean=0, m=5, rfi=0, sideband=-1;
+	int i=1, j, nch=1024, npol=4, outpol=4, nbins=128, threads=1;
+	int equal_poln=0, dspsr=0, rclean=0, m=5, rfi=0, sideband=-1;
 	char input[500], output[500], psr[20], parafile[100], mjdstr[100];
 	double fch1=500.0, bw=200.0, mjd, tsmpl, tsub=10.0;
 	// Looping over the input arguments and reads them in.
@@ -73,6 +78,9 @@ int main(int argc, char *argv[])
 		} else if ( (strcmp(argv[i], "-p")) == 0)
 		{
 			npol = atoi(argv[++i]);
+		} else if ( (strcmp(argv[i], "-op")) == 0)
+		{
+			outpol = atoi(argv[++i]);
 		} else if ( (strcmp(argv[i], "-f")) ==0 )
 		{
 			fch1 = atof(argv[++i]);
@@ -91,6 +99,9 @@ int main(int argc, char *argv[])
 		} else if ( (strcmp(argv[i], "-E")) ==0 )
 		{
 			strcpy(parafile,argv[++i]);
+ 		} else if ( (strcmp(argv[i], "-eq")) ==0 )
+		{
+			equal_poln = 1;			
 		} else if ( (strcmp(argv[i], "-dspsr")) ==0 )
 		{
 			dspsr = 1;
@@ -122,10 +133,20 @@ int main(int argc, char *argv[])
 			usage();
 		}
 	}
-
+	if (npol == outpol)
+	{
+		printf("\nWriting out the data in the input polarisation format\n");
+	} if (outpol == 2)
+	{
+		printf("\nWriting out only RR,LL channels\n");
+	} if (npol == 1)
+	{
+		outpol = 1;
+		printf("\nWriting out the data in the input polarisation format\n");
+	}
 	// Defines the buffer sizes
 	short buf[npol*nch], data4p[npol][nch], data1p[nch];
-	int intdata4p[npol][nch];
+	//int intdata4p[npol][nch];
 	// Opens the input file
 	infile = fopen(input,"rb");
 	if ((infile == NULL))
@@ -134,7 +155,24 @@ int main(int argc, char *argv[])
 	}
 	// Estimates the file size
 	float infile_size = seek_filesize(input);
-	
+	float Lfactor[4] = {0.0, 0.0, 0.0, 0.0};
+	if (outpol == 4)
+	{
+		if (equal_poln == 1)
+		{
+			Struct pl;
+			pl = calc_levels(input, nch, npol);
+			//Lfactor[0] = (pl.RRavg);			
+			//Lfactor[1] = (pl.RLavg);
+			//Lfactor[2] = (pl.LLavg);
+			//Lfactor[3] = (pl.LRavg);
+			Lfactor[1] = (pl.RRavg - pl.RLavg);
+			Lfactor[2] = (pl.RRavg - pl.LLavg);
+			Lfactor[3] = (pl.RRavg - pl.LRavg);
+		}
+	}
+	printf("%f, %f, %f, %f\n",Lfactor[0], Lfactor[1], Lfactor[3], Lfactor[3]);
+	//printf("%f %f %f %f\n",pl.RRavg, pl.RLavg, pl.LLavg, pl.LRavg);
 	// If MJD is not given, it looks for the GMRT hdr
 	// file and calculates the MJD from it using the
 	// mjd_calc() function.
@@ -147,7 +185,7 @@ int main(int argc, char *argv[])
 		tfile = fopen(tstampfile,"r");
 		strcpy(mjdstr,mjd_calc(tfile));
 		mjd = atof(mjdstr);
-		printf("%f\n",mjd);
+		//printf("%f\n",mjd);
 	}	
 
 	// Tries to open the parameter file and read the
@@ -214,15 +252,15 @@ int main(int argc, char *argv[])
 	send_int(outfile, "nbits", nbits);
 	send_double(outfile, "tstart", mjd);
 	send_double(outfile, "tsamp", tsmpl);
-	send_int(outfile, "nifs", npol);
+	send_int(outfile, "nifs", outpol);
 	send_string(outfile,"source_name");
 	send_string(outfile,psr);
 	send_double(outfile, "src_raj", atof(rajstr));
 	send_double(outfile, "src_dej", atof(decjstr));
 	send_string(outfile, "HEADER_END");
-		
 	// Beginning of finterbank conversion
 	int progress=0;
+	//float RRa, RLa, LLa, LRa;
 	while (!feof(infile))
 	{
 		// Loop handling 4 polar data
@@ -234,8 +272,7 @@ int main(int argc, char *argv[])
 			{
 				for (j=0;j<nch;j++)
 				{
-					data4p[i][j] = buf[(j*4)+i];
-					intdata4p[i][j] = buf[(j*4)+i];
+					data4p[i][j] = ((float)buf[(j*4)+i] + Lfactor[i]);
 				}
 			}
 			// Writing out each polarisation channel
@@ -246,10 +283,24 @@ int main(int argc, char *argv[])
 			//	sum+=intdata4p[0][k];
 			//}
 			//printf("%d\n",sum/nch);
-			fwrite(&data4p[0],2,nch,outfile);
-			fwrite(&data4p[2],2,nch,outfile);
-			fwrite(&data4p[1],2,nch,outfile);
-			fwrite(&data4p[3],2,nch,outfile);
+			if (outpol == 4)
+			{
+				//data4p[1] = ((float)*data4p[1]) / 988.;
+				fwrite(&data4p[0],2,nch,outfile);
+				fwrite(&data4p[2],2,nch,outfile);
+				fwrite(&data4p[1],2,nch,outfile);
+				fwrite(&data4p[3],2,nch,outfile);
+			}
+			if (outpol == 2)
+			{
+				
+				//printf("%d %f %f %f %f\n",progress, (float)*data4p[0], (float)*data4p[1], (float)*data4p[2], (float)*data4p[3]);
+				fwrite(&data4p[0],2,nch,outfile);
+				fwrite(&data4p[2],2,nch,outfile);
+				//fwrite(&data4p[1],2,nch,outfile);
+				//fwrite(&data4p[3],2,nch,outfile);
+			}
+
 		}
 		// Loop handling total power data
 		else if (npol == 1)
@@ -265,11 +316,13 @@ int main(int argc, char *argv[])
 			// as the input.
   			fwrite(&data1p,2,nch,outfile);
 		}
-	progress++;
-	printf("\r%.2f%% converted to filterbank",
-			100.0*((float)(sizeof(buf)*progress)/infile_size));
+		progress++;
+		printf("\r%.2f%% converted to filterbank",
+				100.0*((float)(sizeof(buf)*progress)/infile_size));
 	} // end of filterbank conversion
 	printf("\n");
+//	printf("\nhere: %f %f %f %f\n",RRa/progress, RLa/progress, LLa/progress, LRa/progress);
+//	printf("\nhere: %f %f %f %f\n",RRa, RLa, LLa, LRa);
 	
 	fclose(infile);
 	fclose(outfile);
@@ -303,6 +356,40 @@ float seek_filesize(char *inpfile)
 	fclose(fpin);
 	return(fpin_size);
 }
+
+Struct calc_levels(char *inputfile, int nch, int npol)
+{
+	Struct s;
+	FILE *fpin1;
+	int i, j, nsample;
+	short buf1[npol*nch], data14p[npol][nch];
+	float RRa, RLa, LLa, LRa;
+	fpin1 = fopen(inputfile,"rb");
+	while (!feof(fpin1))
+	{	
+		fread(buf1, 2, nch*4, fpin1);
+		for (i=0;i<npol;i++)
+		{
+			for (j=0;j<nch;j++)
+			{
+				data14p[i][j] = buf1[(j*4)+i];
+			}
+		}
+		RRa += (float)*data14p[0];
+		RLa += (float)*data14p[1];
+		LLa += (float)*data14p[2];
+		LRa += (float)*data14p[3];
+		nsample++;
+	}
+	fclose(fpin1);
+	//printf("%d\n", nsample);
+	s.RRavg = RRa / (float) nsample;
+	s.RLavg = RLa / (float) nsample;
+	s.LLavg = LLa / (float) nsample;
+	s.LRavg = LRa / (float) nsample;
+	return s;
+}
+	
 
 // Function that runs DSPSR on the filterbank file.
 void run_dspsr (char *filename, char *parfile, int nbins, double tsub, int threads)
@@ -487,7 +574,8 @@ void usage()
 			"\n-h\t: Prints this help page\n"
 			"\nfilterbank options\n\n"
 			"-n\t: number of channels\n"
-			"-p\t: number of polarisations\n"
+			"-p\t: number of polarisations in the input data\n"
+			"-op\t: number of polarisations in the output data\n"
 			"-f\t: Frequency of the highest channel in MHz (def: 500.0)\n"
 			"-bw\t: Recording bandwidth in MHz (def: 200.0)\n"
 			"-sb\t: Sideband sense. -1 for LSB; 1 for USB (def: -1)\n"
@@ -496,6 +584,8 @@ void usage()
 			"-E\t: Parameter file\n"
 			"-rfi\t: Specify if the data is cleaned of RFI\n"
 			"\t (0: norfix[default]; 1: gptool; 2: rfiClean)\n"
+			"\t-eq\t: Equalise the different polarisation bands.\n"
+			"\t (Experimental and only works with -op=4 option)\n"
 			"\nDSPSR options\n\n"
 			"-dspsr\t: Process filterbank file with DSPSR (def: False)\n"
 			"-b\t: Number of bins to fold (def: 128)\n"
